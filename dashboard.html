@@ -111,10 +111,40 @@
         }
 
         .dashboard {
+            padding: 0 20px 20px 20px;
+        }
+
+        .time-series-row {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
             gap: 20px;
-            padding: 0 20px 20px 20px;
+            margin-bottom: 30px;
+        }
+
+        .snapshot-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+        }
+
+        .row-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            margin: 20px 0 10px 0;
+            border-left: 4px solid #667eea;
+            border-radius: 5px;
+        }
+
+        .row-header h2 {
+            margin: 0;
+            color: #495057;
+            font-size: 1.3em;
+        }
+
+        .row-header p {
+            margin: 5px 0 0 0;
+            color: #6c757d;
+            font-size: 0.9em;
         }
 
         .chart-container {
@@ -213,33 +243,62 @@
     <div class="loading" id="loading">Loading data...</div>
 
     <div class="dashboard" id="dashboard" style="display: none;">
-        <div class="chart-container">
-            <h3>Performance Overview</h3>
-            <div class="stats-grid" id="perfStats"></div>
-            <div class="chart-wrapper">
-                <canvas id="performanceChart"></canvas>
+        
+        <div class="row-header">
+            <h2>Time Series Analysis</h2>
+            <p>Performance and risk trends over time - shows all date ranges</p>
+        </div>
+        
+        <div class="time-series-row">
+            <div class="chart-container">
+                <h3>Performance Overview</h3>
+                <div class="stats-grid" id="perfStats"></div>
+                <div class="chart-wrapper">
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h3>Risk Contribution</h3>
+                <div class="stats-grid" id="riskStats"></div>
+                <div class="chart-wrapper">
+                    <canvas id="riskChart"></canvas>
+                </div>
             </div>
         </div>
 
-        <div class="chart-container">
-            <h3>Risk Contribution</h3>
-            <div class="stats-grid" id="riskStats"></div>
-            <div class="chart-wrapper">
-                <canvas id="riskChart"></canvas>
-            </div>
+        <div class="row-header">
+            <h2>Snapshot Analysis</h2>
+            <p>Factor analysis for selected date range - filtered by date selection above</p>
         </div>
-
-        <div class="chart-container">
-            <h3>Factor Exposures</h3>
-            <div class="chart-wrapper">
-                <canvas id="factorChart"></canvas>
+        
+        <div class="snapshot-row">
+            <div class="chart-container">
+                <h3>Factor Exposures</h3>
+                <div class="chart-wrapper">
+                    <canvas id="factorChart"></canvas>
+                </div>
             </div>
-        </div>
 
-        <div class="chart-container">
-            <h3>Exposure vs Return</h3>
-            <div class="chart-wrapper">
-                <canvas id="scatterChart"></canvas>
+            <div class="chart-container">
+                <h3>Exposure vs Return</h3>
+                <div class="chart-wrapper">
+                    <canvas id="scatterChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h3>Factor Exposures by Manager</h3>
+                <div class="chart-wrapper">
+                    <canvas id="factorExposureBarChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h3>Factor Contributions by Manager</h3>
+                <div class="chart-wrapper">
+                    <canvas id="factorContributionBarChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -401,7 +460,22 @@
             }
         }
 
-        function getFilteredData() {
+        function getTimeSeriesData() {
+            // Time series data - no date filtering, only PM filtering
+            let filteredPerf = perfData.filter(row => row.PM);
+            let filteredRisk = riskData.filter(row => row.PM);
+            
+            // Filter by selected managers only
+            if (selectedManagers.length > 0) {
+                filteredPerf = filteredPerf.filter(row => selectedManagers.includes(row.PM));
+                filteredRisk = filteredRisk.filter(row => selectedManagers.includes(row.PM));
+            }
+            
+            return { perf: filteredPerf, risk: filteredRisk };
+        }
+
+        function getSnapshotData() {
+            // Snapshot data - with both PM and date filtering
             const dateFilter = document.getElementById('dateRange').value;
             
             let filteredPerf = perfData.filter(row => row.PM);
@@ -413,7 +487,7 @@
                 filteredRisk = filteredRisk.filter(row => selectedManagers.includes(row.PM));
             }
             
-            // Filter by date
+            // Filter by date (only for snapshot data)
             if (dateFilter !== 'all') {
                 filteredPerf = filteredPerf.filter(row => row.Date === dateFilter);
                 filteredRisk = filteredRisk.filter(row => row.Date === dateFilter);
@@ -422,8 +496,13 @@
             return { perf: filteredPerf, risk: filteredRisk };
         }
 
+        // Keep legacy function for backward compatibility
+        function getFilteredData() {
+            return getSnapshotData();
+        }
+
         function updateStats() {
-            const { perf, risk } = getFilteredData();
+            const { perf, risk } = getTimeSeriesData();  // Use time series data for overall stats
             
             // Performance stats
             const perfStats = document.getElementById('perfStats');
@@ -432,11 +511,11 @@
             
             perfStats.innerHTML = `
                 <div class="stat-card">
-                    <h4>Avg Return</h4>
+                    <h4>Avg Return (All Dates)</h4>
                     <div class="value">${(avgReturn * 100).toFixed(2)}%</div>
                 </div>
                 <div class="stat-card">
-                    <h4>Avg Exposure</h4>
+                    <h4>Avg Exposure (All Dates)</h4>
                     <div class="value">$${(avgExposure / 1000).toFixed(0)}K</div>
                 </div>
                 <div class="stat-card">
@@ -451,7 +530,7 @@
             
             riskStats.innerHTML = `
                 <div class="stat-card">
-                    <h4>Avg Risk</h4>
+                    <h4>Avg Risk (All Dates)</h4>
                     <div class="value">$${(avgRisk / 1000).toFixed(0)}K</div>
                 </div>
                 <div class="stat-card">
@@ -462,7 +541,7 @@
         }
 
         function createPerformanceChart() {
-            const { perf } = getFilteredData();
+            const { perf } = getTimeSeriesData();
             const ctx = document.getElementById('performanceChart').getContext('2d');
             
             if (charts.performance) {
@@ -519,7 +598,7 @@
         }
 
         function createRiskChart() {
-            const { risk } = getFilteredData();
+            const { risk } = getTimeSeriesData();
             const ctx = document.getElementById('riskChart').getContext('2d');
             
             if (charts.risk) {
@@ -676,6 +755,141 @@
             });
         }
 
+        function createFactorExposureBarChart() {
+            const { perf } = getSnapshotData();
+            const ctx = document.getElementById('factorExposureBarChart').getContext('2d');
+            
+            if (charts.factorExposureBar) {
+                charts.factorExposureBar.destroy();
+            }
+            
+            const factors = ['Beta', 'Momentum', 'Growth', 'Value', 'Size', 'Quality', 'EY', 'ResVol', 'ShortInt', 'Crowding'];
+            
+            // Calculate average exposure by PM and factor
+            const pmData = {};
+            selectedManagers.forEach(pm => {
+                pmData[pm] = {};
+                factors.forEach(factor => {
+                    const pmRecords = perf.filter(row => row.PM === pm);
+                    const avgExposure = pmRecords.reduce((sum, row) => sum + parseFloat(row[factor] || 0), 0) / pmRecords.length;
+                    pmData[pm][factor] = isNaN(avgExposure) ? 0 : avgExposure;
+                });
+            });
+            
+            // Create datasets for each PM
+            const datasets = selectedManagers.map(pm => ({
+                label: pm,
+                data: factors.map(factor => pmData[pm][factor]),
+                backgroundColor: getColorForPM(pm, 0.8),
+                borderColor: getColorForPM(pm),
+                borderWidth: 1
+            }));
+            
+            charts.factorExposureBar = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: factors,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Factors'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Average Exposure'
+                            },
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Factor Exposures by Portfolio Manager'
+                        },
+                        legend: {
+                            display: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function createFactorContributionBarChart() {
+            const { risk } = getSnapshotData();
+            const ctx = document.getElementById('factorContributionBarChart').getContext('2d');
+            
+            if (charts.factorContributionBar) {
+                charts.factorContributionBar.destroy();
+            }
+            
+            const factors = ['Beta.Cont', 'Momentum.Cont', 'Growth.Cont', 'Value.Cont', 'Size.Cont', 'Quality.Cont', 'EY.Cont', 'ResVol.Cont', 'ShortInt.Cont', 'Crowding.Cont'];
+            const factorLabels = ['Beta', 'Momentum', 'Growth', 'Value', 'Size', 'Quality', 'EY', 'ResVol', 'ShortInt', 'Crowding'];
+            
+            // Calculate average contribution by PM and factor
+            const pmData = {};
+            selectedManagers.forEach(pm => {
+                pmData[pm] = {};
+                factors.forEach(factor => {
+                    const pmRecords = risk.filter(row => row.PM === pm);
+                    const avgContribution = pmRecords.reduce((sum, row) => sum + parseFloat(row[factor] || 0), 0) / pmRecords.length;
+                    pmData[pm][factor] = isNaN(avgContribution) ? 0 : avgContribution;
+                });
+            });
+            
+            // Create datasets for each PM
+            const datasets = selectedManagers.map(pm => ({
+                label: pm,
+                data: factors.map(factor => pmData[pm][factor]),
+                backgroundColor: getColorForPM(pm, 0.8),
+                borderColor: getColorForPM(pm),
+                borderWidth: 1
+            }));
+            
+            charts.factorContributionBar = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: factorLabels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Factors'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Average Risk Contribution'
+                            },
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Factor Risk Contributions by Portfolio Manager'
+                        },
+                        legend: {
+                            display: true
+                        }
+                    }
+                }
+            });
+        }
+
         function getColorForPM(pm, alpha = 1) {
             const colors = {
                 'PM1': `rgba(102, 126, 234, ${alpha})`,
@@ -691,6 +905,8 @@
             createRiskChart();
             createFactorChart();
             createScatterChart();
+            createFactorExposureBarChart();
+            createFactorContributionBarChart();
         }
 
         // Initialize the dashboard
