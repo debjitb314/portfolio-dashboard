@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio Management Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            margin: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .controls select {
+            padding: 10px;
+            border: 2px solid #e9ecef;
+            border-radius: 5px;
+            font-size: 16px;
+            min-width: 150px;
+        }
+
+        .multi-select-container {
+            position: relative;
+            min-width: 200px;
+        }
+
+        .multi-select-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 2px solid #e9ecef;
+            border-top: none;
+            border-radius: 0 0 5px 5px;
+            max-height: 150px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+
+        .multi-select-option {
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .multi-select-option:hover {
+            background-color: #f8f9fa;
+        }
+
+        .multi-select-option input[type="checkbox"] {
+            margin: 0;
+        }
+
+        .multi-select-display {
+            padding: 10px;
+            border: 2px solid #e9ecef;
+            border-radius: 5px;
+            font-size: 16px;
+            min-width: 200px;
+            cursor: pointer;
+            background: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .multi-select-display:hover {
+            border-color: #667eea;
+        }
+
+        .controls label {
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+            gap: 20px;
+            padding: 0 20px 20px 20px;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .chart-container h3 {
+            margin-bottom: 20px;
+            color: #495057;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 10px;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #e9ecef;
+        }
+
+        .stat-card h4 {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #495057;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #6c757d;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .controls select {
+                min-width: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Portfolio Management Dashboard</h1>
+        <p>Performance & Risk Analytics</p>
+    </div>
+
+    <div class="controls">
+        <label for="pmFilter">Portfolio Manager:</label>
+        <div class="multi-select-container">
+            <div class="multi-select-display" id="pmDisplay">
+                <span>Select Managers...</span>
+                <span>▼</span>
+            </div>
+            <div class="multi-select-dropdown" id="pmDropdown">
+            </div>
+        </div>
+
+        <label for="dateRange">Date Range:</label>
+        <select id="dateRange">
+            <option value="all">All Months</option>
+        </select>
+
+        <button id="refreshBtn" style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">Refresh Data</button>
+    </div>
+
+    <div class="loading" id="loading">Loading data...</div>
+
+    <div class="dashboard" id="dashboard" style="display: none;">
+        <div class="chart-container">
+            <h3>Performance Overview</h3>
+            <div class="stats-grid" id="perfStats"></div>
+            <div class="chart-wrapper">
+                <canvas id="performanceChart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <h3>Risk Contribution</h3>
+            <div class="stats-grid" id="riskStats"></div>
+            <div class="chart-wrapper">
+                <canvas id="riskChart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <h3>Factor Exposures</h3>
+            <div class="chart-wrapper">
+                <canvas id="factorChart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <h3>Exposure vs Return</h3>
+            <div class="chart-wrapper">
+                <canvas id="scatterChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let perfData = [];
+        let riskData = [];
+        let charts = {};
+        let selectedManagers = [];
+
+        async function loadCSVData() {
+            try {
+                console.log('Starting to load CSV data...');
+                const perfResponse = await fetch('data/perf.csv');
+                const riskResponse = await fetch('data/risk.csv');
+                
+                console.log('Fetch responses:', perfResponse.status, riskResponse.status);
+                
+                if (!perfResponse.ok || !riskResponse.ok) {
+                    throw new Error('HTTP error! status: ' + perfResponse.status + ', ' + riskResponse.status);
+                }
+                
+                const perfCSV = await perfResponse.text();
+                const riskCSV = await riskResponse.text();
+                
+                console.log('CSV text loaded, lengths:', perfCSV.length, riskCSV.length);
+                
+                perfData = Papa.parse(perfCSV, { header: true, skipEmptyLines: true }).data;
+                riskData = Papa.parse(riskCSV, { header: true, skipEmptyLines: true }).data;
+                
+                console.log('Performance data loaded:', perfData.length, 'rows');
+                console.log('Risk data loaded:', riskData.length, 'rows');
+                console.log('Sample perf data:', perfData[0]);
+                
+                initializeControls();
+                updateDashboard();
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('dashboard').style.display = 'grid';
+                
+            } catch (error) {
+                console.error('Error loading CSV data:', error);
+                document.getElementById('loading').innerHTML = 'Error loading data: ' + error.message + '<br>Check browser console for details.';
+            }
+        }
+
+        function initializeControls() {
+            const dateRange = document.getElementById('dateRange');
+            
+            // Initialize multi-select for portfolio managers
+            const pms = [...new Set(perfData.map(row => row.PM).filter(pm => pm))];
+            selectedManagers = [...pms]; // Select all by default
+            initializeMultiSelect(pms);
+            
+            // Populate date range filter
+            const dates = [...new Set(perfData.map(row => row.Date).filter(date => date))];
+            dates.forEach(date => {
+                const option = document.createElement('option');
+                option.value = date;
+                option.textContent = date;
+                dateRange.appendChild(option);
+            });
+            
+            // Add event listeners
+            dateRange.addEventListener('change', updateDashboard);
+            document.getElementById('refreshBtn').addEventListener('click', loadCSVData);
+        }
+
+        function initializeMultiSelect(managers) {
+            const pmDisplay = document.getElementById('pmDisplay');
+            const pmDropdown = document.getElementById('pmDropdown');
+            
+            // Clear existing options
+            pmDropdown.innerHTML = '';
+            
+            // Add "Select All" option
+            const selectAllOption = document.createElement('div');
+            selectAllOption.className = 'multi-select-option';
+            selectAllOption.innerHTML = `
+                <input type="checkbox" id="selectAll" ${selectedManagers.length === managers.length ? 'checked' : ''}>
+                <label for="selectAll">Select All</label>
+            `;
+            pmDropdown.appendChild(selectAllOption);
+            
+            // Add individual manager options
+            managers.forEach(manager => {
+                const option = document.createElement('div');
+                option.className = 'multi-select-option';
+                option.innerHTML = `
+                    <input type="checkbox" id="${manager}" value="${manager}" ${selectedManagers.includes(manager) ? 'checked' : ''}>
+                    <label for="${manager}">${manager}</label>
+                `;
+                pmDropdown.appendChild(option);
+            });
+            
+            // Update display text
+            updateMultiSelectDisplay();
+            
+            // Add event listeners
+            pmDisplay.addEventListener('click', toggleDropdown);
+            
+            // Handle checkbox changes
+            pmDropdown.addEventListener('change', handleManagerSelection);
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.multi-select-container')) {
+                    pmDropdown.style.display = 'none';
+                }
+            });
+        }
+
+        function toggleDropdown() {
+            const pmDropdown = document.getElementById('pmDropdown');
+            pmDropdown.style.display = pmDropdown.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function handleManagerSelection(e) {
+            if (e.target.type === 'checkbox') {
+                const managers = [...new Set(perfData.map(row => row.PM).filter(pm => pm))];
+                
+                if (e.target.id === 'selectAll') {
+                    // Handle "Select All"
+                    const checkboxes = document.querySelectorAll('#pmDropdown input[type="checkbox"]:not(#selectAll)');
+                    checkboxes.forEach(cb => {
+                        cb.checked = e.target.checked;
+                    });
+                    selectedManagers = e.target.checked ? [...managers] : [];
+                } else {
+                    // Handle individual manager selection
+                    if (e.target.checked) {
+                        if (!selectedManagers.includes(e.target.value)) {
+                            selectedManagers.push(e.target.value);
+                        }
+                    } else {
+                        selectedManagers = selectedManagers.filter(pm => pm !== e.target.value);
+                    }
+                    
+                    // Update "Select All" checkbox
+                    const selectAllCheckbox = document.getElementById('selectAll');
+                    selectAllCheckbox.checked = selectedManagers.length === managers.length;
+                }
+                
+                updateMultiSelectDisplay();
+                updateDashboard();
+            }
+        }
+
+        function updateMultiSelectDisplay() {
+            const pmDisplay = document.getElementById('pmDisplay');
+            const span = pmDisplay.querySelector('span:first-child');
+            
+            if (selectedManagers.length === 0) {
+                span.textContent = 'Select Managers...';
+            } else if (selectedManagers.length === 1) {
+                span.textContent = selectedManagers[0];
+            } else {
+                span.textContent = `${selectedManagers.length} managers selected`;
+            }
+        }
+
+        function getFilteredData() {
+            const dateFilter = document.getElementById('dateRange').value;
+            
+            let filteredPerf = perfData.filter(row => row.PM);
+            let filteredRisk = riskData.filter(row => row.PM);
+            
+            // Filter by selected managers
+            if (selectedManagers.length > 0) {
+                filteredPerf = filteredPerf.filter(row => selectedManagers.includes(row.PM));
+                filteredRisk = filteredRisk.filter(row => selectedManagers.includes(row.PM));
+            }
+            
+            // Filter by date
+            if (dateFilter !== 'all') {
+                filteredPerf = filteredPerf.filter(row => row.Date === dateFilter);
+                filteredRisk = filteredRisk.filter(row => row.Date === dateFilter);
+            }
+            
+            return { perf: filteredPerf, risk: filteredRisk };
+        }
+
+        function updateStats() {
+            const { perf, risk } = getFilteredData();
+            
+            // Performance stats
+            const perfStats = document.getElementById('perfStats');
+            const avgReturn = perf.reduce((sum, row) => sum + parseFloat(row.Return || 0), 0) / perf.length;
+            const avgExposure = perf.reduce((sum, row) => sum + parseFloat(row.Exposure || 0), 0) / perf.length;
+            
+            perfStats.innerHTML = `
+                <div class="stat-card">
+                    <h4>Avg Return</h4>
+                    <div class="value">${(avgReturn * 100).toFixed(2)}%</div>
+                </div>
+                <div class="stat-card">
+                    <h4>Avg Exposure</h4>
+                    <div class="value">$${(avgExposure / 1000).toFixed(0)}K</div>
+                </div>
+                <div class="stat-card">
+                    <h4>Records</h4>
+                    <div class="value">${perf.length}</div>
+                </div>
+            `;
+            
+            // Risk stats
+            const riskStats = document.getElementById('riskStats');
+            const avgRisk = risk.reduce((sum, row) => sum + parseFloat(row['$Risk'] || 0), 0) / risk.length;
+            
+            riskStats.innerHTML = `
+                <div class="stat-card">
+                    <h4>Avg Risk</h4>
+                    <div class="value">$${(avgRisk / 1000).toFixed(0)}K</div>
+                </div>
+                <div class="stat-card">
+                    <h4>Risk Records</h4>
+                    <div class="value">${risk.length}</div>
+                </div>
+            `;
+        }
+
+        function createPerformanceChart() {
+            const { perf } = getFilteredData();
+            const ctx = document.getElementById('performanceChart').getContext('2d');
+            
+            if (charts.performance) {
+                charts.performance.destroy();
+            }
+            
+            const datasets = {};
+            perf.forEach(row => {
+                if (!datasets[row.PM]) {
+                    datasets[row.PM] = {
+                        label: row.PM,
+                        data: [],
+                        borderColor: getColorForPM(row.PM),
+                        backgroundColor: getColorForPM(row.PM, 0.1),
+                        tension: 0.1
+                    };
+                }
+                datasets[row.PM].data.push({
+                    x: row.Date,
+                    y: parseFloat(row.Return) * 100
+                });
+            });
+            
+            charts.performance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: Object.values(datasets)
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Return (%)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Monthly Returns by Portfolio Manager'
+                        }
+                    }
+                }
+            });
+        }
+
+        function createRiskChart() {
+            const { risk } = getFilteredData();
+            const ctx = document.getElementById('riskChart').getContext('2d');
+            
+            if (charts.risk) {
+                charts.risk.destroy();
+            }
+            
+            const datasets = {};
+            risk.forEach(row => {
+                if (!datasets[row.PM]) {
+                    datasets[row.PM] = {
+                        label: row.PM,
+                        data: [],
+                        borderColor: getColorForPM(row.PM),
+                        backgroundColor: getColorForPM(row.PM, 0.1),
+                        tension: 0.1
+                    };
+                }
+                datasets[row.PM].data.push({
+                    x: row.Date,
+                    y: parseFloat(row['$Risk'])
+                });
+            });
+            
+            charts.risk = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: Object.values(datasets)
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Risk ($)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Risk Contribution Over Time'
+                        }
+                    }
+                }
+            });
+        }
+
+        function createFactorChart() {
+            const { perf } = getFilteredData();
+            const ctx = document.getElementById('factorChart').getContext('2d');
+            
+            if (charts.factor) {
+                charts.factor.destroy();
+            }
+            
+            const factors = ['Beta', 'Momentum', 'Growth', 'Value', 'Size', 'Quality'];
+            const avgFactors = {};
+            
+            factors.forEach(factor => {
+                avgFactors[factor] = perf.reduce((sum, row) => sum + parseFloat(row[factor] || 0), 0) / perf.length;
+            });
+            
+            charts.factor = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: factors,
+                    datasets: [{
+                        label: 'Average Factor Exposure',
+                        data: factors.map(f => avgFactors[f]),
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        pointBackgroundColor: '#667eea'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Average Factor Exposures'
+                        }
+                    }
+                }
+            });
+        }
+
+        function createScatterChart() {
+            const { perf } = getFilteredData();
+            const ctx = document.getElementById('scatterChart').getContext('2d');
+            
+            if (charts.scatter) {
+                charts.scatter.destroy();
+            }
+            
+            const datasets = {};
+            perf.forEach(row => {
+                if (!datasets[row.PM]) {
+                    datasets[row.PM] = {
+                        label: row.PM,
+                        data: [],
+                        backgroundColor: getColorForPM(row.PM, 0.6),
+                        borderColor: getColorForPM(row.PM)
+                    };
+                }
+                datasets[row.PM].data.push({
+                    x: parseFloat(row.Exposure) / 1000,
+                    y: parseFloat(row.Return) * 100
+                });
+            });
+            
+            charts.scatter = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: Object.values(datasets)
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Exposure ($000s)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Return (%)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Exposure vs Return'
+                        }
+                    }
+                }
+            });
+        }
+
+        function getColorForPM(pm, alpha = 1) {
+            const colors = {
+                'PM1': `rgba(102, 126, 234, ${alpha})`,
+                'PM2': `rgba(118, 75, 162, ${alpha})`,
+                'PM3': `rgba(255, 99, 132, ${alpha})`
+            };
+            return colors[pm] || `rgba(75, 192, 192, ${alpha})`;
+        }
+
+        function updateDashboard() {
+            updateStats();
+            createPerformanceChart();
+            createRiskChart();
+            createFactorChart();
+            createScatterChart();
+        }
+
+        // Initialize the dashboard
+        loadCSVData();
+    </script>
+</body>
+</html>
